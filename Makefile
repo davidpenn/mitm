@@ -12,6 +12,9 @@ build: $(TARGETS)
 bin/%:
 	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $@ cmd/$(patsubst %.exe,%,$(notdir $*))/main.go
 
+install: build
+	cp bin/* $(GOPATH)/bin/
+
 .PHONY: clean
 clean:
 	rm -rf bin/ dist/

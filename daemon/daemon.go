@@ -2,15 +2,39 @@ package daemon
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/fatih/color"
+	"github.com/kr/mitm"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 )
 
 var (
 	log = logrus.StandardLogger()
 )
+
+// StartServer and listen for requests
+func StartServer(cmd *cobra.Command, args []string) {
+	path, _ := cmd.Flags().GetString("database")
+	maxValueSize, _ := cmd.Flags().GetString("database-max-size")
+	replay, _ := cmd.Flags().GetBool("replay")
+	server := NewServer(path, maxValueSize, replay)
+
+	ca, err := genCA()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	proxy := &mitm.Proxy{
+		CA:   &ca,
+		Wrap: server.Handler,
+	}
+
+	addr, _ := cmd.Flags().GetString("listen")
+	http.ListenAndServe(addr, proxy)
+}
 
 func colorFromMethod(method, format string, a ...interface{}) string {
 	switch strings.ToUpper(method) {
