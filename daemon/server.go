@@ -90,25 +90,34 @@ func (m *Server) getFromCache(r *RequestLogger) (*RequestLogger, bool) {
 			log.Error(err)
 			continue
 		}
+
+		// compare headers
 		if !cmp.Equal(r.Headers, req.Headers) {
 			continue
 		}
+
+		// compare query
 		if !cmp.Equal(r.Query, req.Query) {
 			continue
 		}
+
+		// compare body
 		if strings.Contains(r.Headers.Get("Content-Type"), "application/json") {
 			var a, b interface{}
-			json.Unmarshal(r.Body, &a)
-			json.Unmarshal(req.Body, &b)
-			if a != nil && b != nil {
-				if cmp.Equal(a, b) {
-					return req, true
-				}
+			if err = json.Unmarshal(r.Body, &a); err != nil {
+				continue
 			}
-		}
-		if !cmp.Equal(r.Body, req.Body) {
+			if err = json.Unmarshal(req.Body, &b); err != nil {
+				continue
+			}
+			if !cmp.Equal(a, b) {
+				continue
+			}
+		} else if !cmp.Equal(r.Body, req.Body) {
 			continue
 		}
+
+		// everything matches
 		return req, true
 	}
 	return r, false
