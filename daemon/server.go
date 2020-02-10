@@ -9,11 +9,13 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/fatih/color"
 	"github.com/google/go-cmp/cmp"
+	"github.com/julienschmidt/httprouter"
 	"github.com/prologic/bitcask"
 )
 
 // Server handler
 type Server struct {
+	*httprouter.Router
 	db     *bitcask.Bitcask
 	replay bool
 }
@@ -25,13 +27,25 @@ func NewServer(pathToCache, maxValueSize string, replay bool) *Server {
 		log.Fatal(err)
 	}
 	db, _ := bitcask.Open(pathToCache, bitcask.WithMaxValueSize(size))
-	return &Server{db, replay}
+	server := &Server{
+		Router: httprouter.New(),
+		db:     db,
+		replay: replay,
+	}
+	server.Router.GET("/requests/:id", server.getRequestHandler)
+	return server
 }
 
 // GetRequest with id from the cache database
 func (m *Server) GetRequest(id string) (*RequestLogger, error) {
 	var req *RequestLogger
-	data, _ := m.db.Get([]byte(id))
+	data, err := m.db.Get([]byte(id))
+	switch {
+	case err == bitcask.ErrKeyNotFound:
+		return nil, nil
+	case err != nil:
+		return nil, err
+	}
 	return req, json.Unmarshal(data, &req)
 }
 
@@ -121,6 +135,24 @@ func (m *Server) getFromCache(r *RequestLogger) (*RequestLogger, bool) {
 		return req, true
 	}
 	return r, false
+}
+
+func (m *Server) getRequestHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	data, err := m.GetRequest(ps.ByName("id"))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if data == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(data)
 }
 
 func (m *Server) saveToCache(r *RequestLogger) {

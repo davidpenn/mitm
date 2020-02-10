@@ -33,7 +33,17 @@ func StartServer(cmd *cobra.Command, args []string) {
 	}
 
 	addr, _ := cmd.Flags().GetString("listen")
-	http.ListenAndServe(addr, proxy)
+	http.ListenAndServe(addr, httpHandler(server, proxy))
+}
+
+func httpHandler(api, proxy http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Hostname() == "" {
+			api.ServeHTTP(w, r)
+		} else {
+			proxy.ServeHTTP(w, r)
+		}
+	})
 }
 
 func colorFromMethod(method, format string, a ...interface{}) string {
